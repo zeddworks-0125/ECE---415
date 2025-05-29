@@ -1,0 +1,84 @@
+#include <Adafruit_GFX.h>       // Graphics library for OLED
+#include <Adafruit_SSD1306.h>   // OLED display library
+#include <TinyGPSPlus.h>        // GPS data decoder
+#include <HardwareSerial.h>     //ESP32 communicate with GPS
+
+
+// OLED screen settings
+#define SCREEN_WIDTH 128        // Screen is 128 pixels wide
+#define SCREEN_HEIGHT 64        // and 64 pixels tall
+#define OLED_RESET -1           // No reset pin needed
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET); // Create OLED object
+
+
+// GPS module connections
+#define GPS_RX_PIN 16  // GPS TX wire → ESP32 RX (GPIO16) (GPS sends data here)
+#define GPS_TX_PIN 17  // GPS RX wire ← ESP32 TX (GPIO17) (ESP32 sends commands here)
+HardwareSerial SerialGPS(1);  
+TinyGPSPlus gps;              // Create GPS decoder object
+
+
+void setup() {
+  Serial.begin(115200);       // Start serial monitor for debugging
+ 
+  // Start communication with GPS module
+  SerialGPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN); // 9600 baud speed
+
+
+  // Try to start OLED display
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // 0x3C is OLED's address
+    Serial.println("OLED failed!");  // Show error if display doesn't work
+    while (1);                      // Freeze program if display fails
+  }
+ 
+  // Prepare the OLED display
+  display.clearDisplay();     // Clear any old content
+  display.setTextSize(1);     // Normal-sized text
+  display.setCursor(0, 0);    // Start writing at top-left corner
+  display.println("GPS Debug Mode");  // Show welcome message
+  display.println("Press 'D' for raw data"); // Instructions
+  display.display();          // Send text to display
+}
+
+
+void loop() {
+  static bool showRaw = false; // Tracks if we should show raw GPS data
+
+
+  // Check if user pressed 'D' in Serial Monitor
+  if (Serial.available()) {
+    if (Serial.read() == 'D') showRaw = !showRaw; // Toggle raw data mode
+  }
+
+
+  // Check for incoming GPS data
+  while (SerialGPS.available()) {
+    char c = SerialGPS.read(); // Read one character from GPS
+   
+    // If raw data mode is ON, send GPS data to Serial Monitor
+    if (showRaw) Serial.write(c);  
+   
+    // Try to decode GPS data and update display if successful
+    if (gps.encode(c)) updateDisplay();
+  }
+}
+
+
+// Function to update the OLED screen with GPS info
+void updateDisplay() {
+  display.clearDisplay();     // Wipe the display
+  display.setCursor(0, 0);    // TOP to LEFT ung sulat
+
+
+  // If GPS has valid location data
+  if (gps.location.isValid()) {
+    display.print("Lat: "); display.println(gps.location.lat(), 6); // Show latitude (6 decimal places for accurate output)
+    display.print("Lng: "); display.println(gps.location.lng(), 6); // Show longitude
+    display.print("Sats: "); display.println(gps.satellites.value()); // Number of satellites
+  } else {
+    // If no GPS signal
+    display.println("No GPS fix"); // Show error message
+    display.print("Chars: "); display.println(gps.charsProcessed()); // Show how much data was received
+  }
+  display.display(); // Send updates to screen
+}
